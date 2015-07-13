@@ -1,0 +1,4 @@
+name = Remarketing
+description = Manage all types of remarketing tag
+core = 7.x
+dependencies[] = entity

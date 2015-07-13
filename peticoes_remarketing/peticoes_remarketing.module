@@ -1,0 +1,231 @@
+<?php
+
+/**
+ * Implements hook_entity_info()
+ */
+function peticoes_remarketing_entity_info(){
+	$info = array();
+
+	$info['remarketing_tag'] = array(
+		'label'       => t('Remarketing Tag'),
+		'base table'  => 'remarketing_tags',
+		'entity keys' => array(
+			'id'    => 'id',
+			'label' => 'name',
+		),
+		// 'entity_class_uri' -> simple way to call defaultUri()
+		'uri callback' => 'entity_class_uri',
+		'module' => 'peticoes_remarketing',
+		// Necessary to wrappe entities. Used to 'controller class'
+		'entity class' => 'RemarketingEntity',
+		// Necessary to CRUD
+		'controller class' => 'RemarketingEntityAPIController',
+		// Control de direct remarketing tags access (?)
+		// Required to 'admin ui'
+		'access callback' => 'remarketing_access_callback_admin_ui',
+		'admin ui' => array(
+			'path' => 'admin/content/remarketing_tags',
+			// 'menu wildcard' => '%rmkt_tag',
+			'file' => 'includes/admin.remarketing_tag.inc'
+		),
+		// Tells Drupal this entity type should use field
+		// Fieldable - allow Field API manage fields on this entity
+		'fieldable' => TRUE,
+		// Necessary to make entity fieldable
+		'bundles' => array(
+			// When has only one bundle, its recommend use the same machine name of the Entity Type
+			'remarketing_tag' => array(
+				'label' => t('Basic Remarketing Tag'),
+				'admin' => array(
+					// The same path of 'admin ui' - new tabs will be placed there
+					'path' => 'admin/content/remarketing_tags',
+					'controller class' => 'EntityDefaultUIController',
+				),
+			),
+		),
+		'view modes' => array(
+			'member' => array(
+				'label' => t('Member'),
+				'custom settings' => FALSE,
+			),
+			'non_member' => array(
+				'label' => t('Non Member'),
+				'custom settings' => FALSE,
+			),
+		),
+	);
+
+	return $info;
+}
+
+/**
+ * Imlements hook_entity_property_info()
+ *
+ * Supplies a set of detailed info about the entity (principally to Views)
+ */
+function peticoes_remarketing_entity_property_info(){
+	$info = array();
+
+	$info['remarketing_tag']['properties'] = array(
+		'id' => array(
+			'label' => t('ID'),
+			'description' => t('The unique ID of the Tag'),
+			'type' => 'integer',
+			'schema field' => 'id',
+		),
+		'name' => array(
+			'label' => t('Name'),
+			'description' => t('The Remarketing Tag Name'),
+			'type' => 'text',
+			'schema field' => 'name',
+		),
+		'tag' => array(
+			'label' => t('Tag'),
+			'description' => t('The script of the tag'),
+			'type' => 'text',
+			'schema field' => 'tag',
+		),
+		'type' => array(
+			'label' => t('Type'),
+			'description' => t('The type of the tag'),
+			'type' => 'text',
+			'schema field' => 'type',
+		),
+		'pages' => array(
+			'label' => t('Pages'),
+			'description' => t('The pages to show the tag'),
+			'type' => 'text',
+			'schema field' => 'pages',
+		),
+	);
+
+	return $info;
+}
+
+/**
+ * implements hook_js_alter()
+ */
+function peticoes_remarketing_js_alter(&$javascript) {
+
+	$query = new EntityFieldQuery();
+	$query->entityCondition('entity_type', 'remarketing_tag');
+	$result = $query->execute();
+	if(empty($result))
+		return;
+	$result = array_keys($result['remarketing_tag']);
+
+	$entity_tags = entity_load('remarketing_tag', $result);
+
+	foreach ($entity_tags as $entity) {
+
+		$wrapper = entity_metadata_wrapper('remarketing_tag', $entity);
+		$string_pages = $wrapper->pages->value();
+		$pages_array = rmkt_func_prepare_pages_array($string_pages);
+
+		if(rmkt_func_verifies_current_page($pages_array) || empty($string_pages)) {
+			$javascript[$wrapper->name->value()] = rmkt_func_render_js_array($wrapper);
+		}
+	}
+
+}
+
+/**
+ * Verifies the if the current page is in a given array
+ *
+ * $pages - array with pages to access
+ */
+function rmkt_func_verifies_current_page($pages) {
+	$current_page = current_path();
+	$path_alias = drupal_lookup_path('alias', $current_page);
+	if(in_array($current_page, $pages) || in_array($path_alias, $pages))
+		return TRUE;
+	return FALSE;
+}
+
+/**
+ * Get a string with the pages and covert to array
+ */
+function rmkt_func_prepare_pages_array($string) {
+	$pages_array = preg_split('/\r\n|[\r\n]/', $string);
+	return $pages_array;
+}
+
+/**
+ * Access callback to Admin UI
+ *
+ * Only Administer	
+ */
+function remarketing_access_callback_admin_ui($op, $entity = NULL, $account = NULL) {
+	return user_access('administer', $account);
+	// return TRUE;
+}
+
+/** 
+ * With the values of an wrapper construct an drupal js array
+ */
+function rmkt_func_render_js_array($wrapper) {
+	$js_array = array();
+
+	$js_array = array(
+		'data' => '</script>'.$wrapper->tag->value().'<script>',
+		'scope' => $wrapper->type->value() == 'facebook' ? 'header' : 'footer',
+		'type' => 'inline',
+		'defer' => FALSE,
+		'group' => 'JS_DEFAULT',
+		'every_page' => TRUE,
+		'weight' => 0,
+		'preprocess' => TRUE,
+	);
+
+	return $js_array;
+
+}
+
+/**
+ * Extends class EntityAPIController
+ */
+class RemarketingEntityAPIController extends EntityAPIController {
+
+	/**
+	 * Override buildContent()
+	 */
+	public function buildContent($entity, $view_mode = 'member', $langcode = NULL, $content = array()){
+		
+		$build = parent::buildContent($entity, $view_mode, $langcode, $content);
+		
+		$build['name'] = array(
+			'#type' => 'markup',
+			'#markup' => l($entity->name, 'remarketing_tag/'.$entity->id),
+		);
+
+		// Its necessary to override all field isnt declared on 'entity keys' on hook_entity_info()
+		$build['tag'] = array(
+			'#type'   => 'markup',
+			'#markup' => check_plain($entity->tag),
+			'#prefix' => "<div class='code-tag'>",
+			'#suffix' => '</div>',
+		);
+
+		$build['type'] = array(
+			'#type' => 'markup',
+			'#markup' => check_plain($entity->type),
+			'#prefix' => '<p> Type: ',
+			'#suffix' => '</p>', 
+		);
+		return $build;
+	}
+}
+
+/**
+ * Override the class Entity
+ */ 
+class RemarketingEntity extends Entity {
+	/**
+	 * Override the method defaultUri()
+	 *
+	 * Change the path from 'default/id' to 'remarketing_tag/id'
+	 */
+	function defaultUri() {
+		return array('path' => 'remarketing_tag/'.$this->identifier());
+	}
+}

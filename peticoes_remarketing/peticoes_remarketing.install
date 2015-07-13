@@ -1,0 +1,49 @@
+<?php
+
+/**
+ * Implements hook_schema()
+ */
+function peticoes_remarketing_schema(){
+	$schema = array();
+
+	$schema['remarketing_tags'] = array(
+		'description' => 'The base table for the Remarketing Module',
+		'fields' => array(
+			'id' => array(
+				'description' => 'Primary key of the Remarketing Tags',
+				'type'	      => 'serial',
+				'unsigned' 	  => TRUE,
+				'not null' 	  => TRUE,
+			),
+			'name' => array(
+				'description' => 'The name of the Tag',
+				'type' 	      => 'varchar',
+				'length'	  => 255,
+				'not null'    => FALSE,
+			),
+			'tag' => array(
+				'description' => 'The code of the tag',
+				'type' 	   	  => 'text',
+				'size'        => 'big',
+				'not null'    => FALSE,
+				'default'     => NULL,
+			),
+			'type' => array(
+				'description' => 'The type of the tag',
+				'type'        => 'varchar',
+				'length'      => 255,
+				'not null'    => FALSE,
+			),
+			'pages' => array(
+				'description' => 'The pages to show the tag',
+				'type' 		  => 'text',
+				'size' 		  => 'big',
+				'not null' 	  => FALSE,
+				'default' 	  => NULL,
+			),
+		),
+		'primary key' => array('id'),
+	);
+
+	return $schema;
+}
